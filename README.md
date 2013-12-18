@@ -4,6 +4,10 @@ MOLPay Wordpress e-Commerce Plugin
 MOLPay Plugin for Wordpress e-Commerce Shopping Cart develop by MOLPay technical team.
 
 
+Supported version
+-----------------
+WP eCommerce 3.8.x.x and WP 3.7.x
+
 Notes
 -----
 
