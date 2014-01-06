@@ -17,6 +17,15 @@ $nzshpcrt_gateways[$num] = array(
     'submit_function'   => 'submit_molpay'
 );
 
+/**
+ * Initialize the order if MOLPay payment method was selected
+ * 
+ * @global object $wpdb
+ * @global object $wp_object_cache
+ * @param type $seperator
+ * @param int $sessionid
+ * @return void
+ */
 function gateway_molpay($seperator, $sessionid) {
     global $wpdb, $wp_object_cache;
 
@@ -82,8 +91,8 @@ function gateway_molpay($seperator, $sessionid) {
     $ship_sql  = "SELECT form_id,value FROM `".WPSC_TABLE_SUBMITED_FORM_DATA."` WHERE `log_id`='".$cart[0]['purchaseid']."' ";
     $ship_res  = $wpdb->get_results($ship_sql,ARRAY_A);
         
-    $size_ship = sizeof($ship_res);	
-	
+    $size_ship = sizeof($ship_res);
+    
     for($k = 0; $k < $size_ship; $k++) {
         $form_id = $ship_res[$k]['form_id'];
 
@@ -155,6 +164,7 @@ function gateway_molpay($seperator, $sessionid) {
         }	
     }
     
+    //Construct information about buying    
     $desc .= "------------------------\nProduct(s) Information\n------------------------\n";
     $desc .= $p_desc . "\n";
 
@@ -162,7 +172,7 @@ function gateway_molpay($seperator, $sessionid) {
     $desc .= $s_name . ' ' . $s_name2;
     $desc .= "\n" . $s_address . "\n" . $s_address2 . "\n" . $s_address3 . "\n" . $s_address4;
 
-    $data['product_price'] = $total_price; // NOT USE	
+    $data['product_price'] = $total_price; //This data cannot be used in MOLPay system
     $data['amount'] = $purchase_log[0]['totalprice'];
     $data['orderid'] = $purchase_log[0]['id'];	
     $data['bill_mobile'] = $b_fon;			
@@ -172,16 +182,12 @@ function gateway_molpay($seperator, $sessionid) {
     $data['currency'] = $cur_code;			
     $data['country'] = "MY";				
     $data['returnurl'] = $data['returnurl'];		
-    $data['vcode'] = md5($data['amount'] . $data['merchant_id'] . $data['orderid'] . $data['verify_key']);
-
-    $_SESSION['MOLPay'] =   $data['bill_name'] . '||' . $data['bill_mobile'] . '||' . $data['bill_email'] . '||' . 
-                            $b_address . ' ' . $b_city . ' ' . $b_postcode . ' ' . $b_state . ' ' . $b_county . '||' .
-                            $s_name . ' ' . $s_name2 . '||' . $s_address . " " . $s_address2 . " " . $s_address3 . " " . $s_address4;
+    $data['vcode'] = md5($data['amount'] . $data['merchant_id'] . $data['orderid'] . $data['verify_key']); //Generate verfication code
 	
-    // Create Form to post to MOLPay Online Payment Gateway
+    //Create Form to post to MOLPay Online Payment Gateway
     $output= "<center><form id='molpay_form' name='molpay_form' method='post' action='$molpay_url'>\n";
 	
-    foreach($data as $n=>$v) {
+    foreach($data as $n => $v) {
         $output .= "<input type='hidden' name='$n' value='$v' />\n";
     }
 	
@@ -190,27 +196,33 @@ function gateway_molpay($seperator, $sessionid) {
     $output .= "<br><input type='image' src='wp-content/plugins/wp-e-commerce/images/connect_molpay.gif' width='44' length='44'>";
     $output .= "<br><br><font face='arial' size='2'>Please wait for a while.. You'll redirect to MOLPay Online Payment Gateway.</font></center>";
  
+    //flush all the form to the browser view
     echo($output);
 
     if(get_option('molpay_debug') == 0) {
+        //Auto submit javascript
         echo "<script language='javascript'type='text/javascript'>setTimeout(\"document.getElementById('molpay_form').submit()\",1500);</script>";
     }
     exit();
 }
 
-function nzshpcrt_molpay_callback() {
-    if(isset($_SESSION['MOLPay'])) {
-        list($buyername, $buyercont, $buyermail, $buyeraddr, $shippingname, $shippingaddr) = explode('||', $_SESSION['MOLPay']);
-        unset($_SESSION['MOLPay']);
-    }
-    
+/**
+ * Received status about the order
+ * 
+ * @global object $wpdb
+ */
+function nzshpcrt_molpay_callback() {    
     global $wpdb;
     
+    //Check skey
     $key0 = md5($_REQUEST['tranID'] . $_REQUEST['orderid'] . $_REQUEST['status'] . get_option('molpay_merchant_id') . $_REQUEST['amount'] . $_REQUEST['currency']);
     $key1 = md5($_REQUEST['paydate'] . get_option('molpay_merchant_id') . $key0 . $_REQUEST['appcode'] . get_option('molpay_vkey'));
     
     if(isset($_REQUEST['skey']) && $_REQUEST['skey'] == $key1) {
         $data = $wpdb->get_row("SELECT * FROM `".WPSC_TABLE_PURCHASE_LOGS."` WHERE `id` = ".$_REQUEST['orderid']."");
+        
+        $ship_res = molpay_inline_classes_object_function::query_data($wpdb, $_REQUEST['orderid']);
+        
         $_POST['sessionid'] = $sessionid = $data->sessionid;
         $transid = $_REQUEST['tranID'];
         $retStatus = $_REQUEST['status'];
@@ -234,12 +246,12 @@ function nzshpcrt_molpay_callback() {
                 Approval code : " . $_REQUEST['appcode'] . "\n
                 Amount : " . $_REQUEST['currency'] . $_REQUEST['amount'] . "\n\n
                 --------------------------------------------------------------\n
-                Buyer Name : " . $buyername . "\n
-                Buyer Phone : " . $buyercont . "\n
-                Buyer Email : " . $buyermail . "\n
-                Buyer Address : " . $buyeraddr . "\n
-                Shipping Name : " . $shippingname . "\n
-                Shipping Address : " . $shippingaddr . "\n                
+                Buyer Name : " . $ship_res[0]['value'] . ' ' . $ship_res[1]['value'] . "\n
+                Buyer Phone : " . $ship_res[15]['value'] . "\n
+                Buyer Email : " . $ship_res[7]['value'] . "\n
+                Buyer Address : " . $ship_res[2]['value'] . ', ' . $ship_res[6]['value'] . ', ' . $ship_res[3]['value'] . ', ' . $ship_res[4]['value'] . "\n
+                Shipping Name : " . $ship_res[8]['value'] . ' ' . $ship_res[9]['value'] . "\n
+                Shipping Address : " . $ship_res[10]['value'] . ', ' . $ship_res[14]['value'] . ', ' . $ship_res[11]['value'] . ', ' . $ship_res[12]['value'] . "\n                
             ";
             
             wp_mail( get_option('admin_email'), 'Accepted Payment Notification | MOLPay', $bodyContent);
@@ -263,7 +275,8 @@ function nzshpcrt_molpay_callback() {
         $key0 = md5($_REQUEST['tranID'].$_REQUEST['orderid'].$_REQUEST['status'].get_option('molpay_merchant_id').$_REQUEST['amount'].$_REQUEST['currency']);
         $key1 = md5($_REQUEST['paydate'].get_option('molpay_merchant_id').$key0.$_REQUEST['appcode'].get_option('molpay_vkey'));
 
-        if( $skey != $key1 ) $status= -1;
+        if( $skey != $key1 )
+            $status= -1;
 
         switch($status) {  
             case '00':
@@ -291,6 +304,11 @@ function nzshpcrt_molpay_callback() {
             default: // do nothing, safest course of action here.
             break;
         }
+    }
+    //Either merchant missconfigure the merchantID or vcode
+    else if(isset($_REQUEST['skey']) && $_REQUEST['skey'] != $key1) {
+        echo '<h1>There was an error during processing the information</h1>';
+        echo '<p>Incorrect merchantID or vcode was provided. Please recheck!';
     }
 }
 
@@ -355,5 +373,26 @@ function form_molpay() {
     return $output;
 }
 add_action('init', 'nzshpcrt_molpay_callback');
-add_action('init', 'nzshpcrt_molpay_results');	
+add_action('init', 'nzshpcrt_molpay_results');
+
+/**
+ * Add molpay class to prevent name conflict
+ * 
+ */
+class molpay_inline_classes_object_function {
+    
+    /**
+     * Get the order cart details
+     * 
+     * @param object $wpdb
+     */
+    static function query_data( $wpdb, $orderId ) {
+        $cart_sql = "SELECT * FROM `".WPSC_TABLE_CART_CONTENTS."` WHERE `purchaseid`='".$orderId."'"; 
+        $cart = $wpdb->get_results($cart_sql, ARRAY_A) ;
+        
+        $ship_sql  = "SELECT form_id,value FROM `".WPSC_TABLE_SUBMITED_FORM_DATA."` WHERE `log_id`='".$cart[0]['purchaseid']."' ";
+        return $wpdb->get_results($ship_sql, ARRAY_A);
+    }
+    
+}
 ?>
