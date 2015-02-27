@@ -7,7 +7,7 @@ MOLPay Plugin for Wordpress e-Commerce Shopping Cart develop by MOLPay technical
 Supported version
 -----------------
 WP eCommerce 3.8.x.x and WP 3.7.x,  
-WP eCommerce 3.8.x.x and WP 3.8.x,
+WP eCommerce 3.8.x.x and WP 3.8.x,  
 WP eCommerce 3.9.x.x and WP 4.1.x
 
 Notes
